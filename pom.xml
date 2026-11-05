@@ -69,7 +69,7 @@
 		<dependency>
    			<groupId>org.postgresql</groupId>
     		<artifactId>postgresql</artifactId>
-    		<sccope>runtime</sccope>
+    		<scope>runtime</scope>
 		</dependency>
 	</dependencies>
 
