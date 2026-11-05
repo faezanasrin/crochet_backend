@@ -12,18 +12,8 @@ public class DataInitializer {
     @Bean
     CommandLineRunner initDatabase(ProductRepository repository) {
         return args -> {
-            if (repository.count() > 0) {
-                return;
-            }
-
-            // ==================== BOOKMARKS ====================
-            createProduct(repository,
-                "Little Bee Bookmark",
-                "Bookmarks",
-                7.50,
-                "Mercerized Cotton Thread",
-                "http://localhost:5173/assets/bee_bookmarker.jpeg"
-            );
+            // Clears previous database rows that have the old "localhost:5173" URLs
+            repository.deleteAll();
 
             // ==================== FLOWERS ====================
             createProduct(repository,
@@ -31,7 +21,7 @@ public class DataInitializer {
                 "Flowers",
                 16.00,
                 "100% Milk Cotton",
-                "http://localhost:5173/assets/tulip.jpeg"
+                "/assets/tulip.jpeg"
             );
 
             // ==================== BOUQUETS ====================
@@ -40,15 +30,25 @@ public class DataInitializer {
                 "Bouquets",
                 38.50,
                 "Combed Milk Cotton",
-                "http://localhost:5173/assets/bouquet.jpeg"
+                "/assets/bouquet.jpeg"
             );
+
             // ==================== KEYCHAINS ====================
             createProduct(repository,
                 "Cute Daisy Keychain",
                 "Keychains",
                 10.50,
                 "Chenille Velvet",
-                "http://localhost:5173/assets/keychain.jpg"
+                "/assets/keychain.jpg"
+            );
+
+            // ==================== BOOKMARKS ====================
+            createProduct(repository,
+                "Little Bee Bookmark",
+                "Bookmarks",
+                7.50,
+                "Mercerized Cotton Thread",
+                "/assets/bee_bookmarker.jpeg"
             );
         };
     }
