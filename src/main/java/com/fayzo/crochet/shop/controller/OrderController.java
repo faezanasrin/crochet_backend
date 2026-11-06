@@ -1,5 +1,10 @@
 package com.fayzo.crochet.shop.controller;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -12,8 +17,10 @@ import org.springframework.web.bind.annotation.*;
 
 import com.fayzo.crochet.shop.model.Customer;
 import com.fayzo.crochet.shop.model.CustomerOrder;
+import com.fayzo.crochet.shop.model.Product;
 import com.fayzo.crochet.shop.repository.CustomerRepository;
 import com.fayzo.crochet.shop.repository.OrderRepository;
+import com.fayzo.crochet.shop.repository.ProductRepository;
 import com.fayzo.crochet.shop.service.CustomerSessionService;
 import com.fayzo.crochet.shop.service.CustomerSessionService.SessionPrincipal;
 
@@ -28,15 +35,18 @@ public class OrderController {
 
     private final OrderRepository orderRepository;
     private final CustomerRepository customerRepository;
+    private final ProductRepository productRepository;
     private final CustomerSessionService sessionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public OrderController(
             OrderRepository orderRepository,
             CustomerRepository customerRepository,
+            ProductRepository productRepository,
             CustomerSessionService sessionService) {
         this.orderRepository = orderRepository;
         this.customerRepository = customerRepository;
+        this.productRepository = productRepository;
         this.sessionService = sessionService;
     }
 
@@ -67,37 +77,101 @@ public class OrderController {
                 "pincode", customer.get().getPincode()));
         order.setCustomNotes((String) orderData.get("customNotes"));
         String paymentMethod = (String) orderData.get("paymentMethod");
-        String paymentReference = (String) orderData.get("paymentReference");
-        if (!"UPI / GPay".equals(paymentMethod)
-                && !"Cash on Delivery".equals(paymentMethod)) {
+        Object utrValue = orderData.getOrDefault(
+                "utrNumber", orderData.get("paymentReference"));
+        String utrNumber = utrValue instanceof String value ? value.trim() : "";
+        if (!"UPI".equals(paymentMethod)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Select a valid payment method."));
+                    .body(Map.of("error", "Only UPI payment is accepted."));
         }
-        if ("UPI / GPay".equals(paymentMethod)
-                && (paymentReference == null || paymentReference.isBlank()
-                || paymentReference.length() > 100)) {
+        if (!utrNumber.matches("\\d{12}")) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "A valid UPI transaction ID is required."));
+                    .body(Map.of("error", "A valid 12-digit UPI reference / UTR is required."));
         }
-        order.setPaymentMethod(paymentMethod);
-        order.setPaymentStatus("UPI / GPay".equals(paymentMethod) ? "PENDING" : "NOT_REQUIRED");
-        order.setPaymentReference(paymentReference);
+        order.setPaymentMethod("UPI");
+        order.setPaymentStatus("PENDING");
+        order.setPaymentReference(utrNumber);
+        order.setUtrNumber(utrNumber);
 
-        Object total = orderData.get("totalAmount");
-        if (total != null) {
-            order.setTotalAmount(Double.valueOf(total.toString()));
+        Object itemsValue = orderData.get("items");
+        if (!(itemsValue instanceof List<?> items) || items.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Add at least one valid product to the order."));
         }
 
-        Object items = orderData.get("items");
-        if (items != null) {
-            try {
-                order.setOrderedItemsSummary(objectMapper.writeValueAsString(items));
-            } catch (JsonProcessingException exception) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Order items are invalid."));
+        BigDecimal subtotal = BigDecimal.ZERO;
+        List<Map<String, Object>> verifiedItems = new ArrayList<>();
+        for (Object itemValue : items) {
+            if (!(itemValue instanceof Map<?, ?> item)) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Order items are invalid."));
             }
+
+            Long productId = parseLong(item.get("productId"));
+            Integer quantity = parsePositiveInteger(item.get("quantity"));
+            if (productId == null || quantity == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Each order item needs a valid product and quantity."));
+            }
+
+            Optional<Product> productResult = productRepository.findById(productId);
+            if (productResult.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "A product in your basket is no longer available."));
+            }
+            Product product = productResult.get();
+            if (!product.isInStock()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", product.getName() + " is out of stock."));
+            }
+            if (product.getPrice() == null || product.getPrice() < 0) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "A product in your basket has an invalid price."));
+            }
+
+            BigDecimal itemTotal = BigDecimal.valueOf(product.getPrice())
+                    .multiply(BigDecimal.valueOf(quantity));
+            subtotal = subtotal.add(itemTotal);
+            Map<String, Object> verifiedItem = new HashMap<>();
+            verifiedItem.put("productId", product.getId());
+            verifiedItem.put("name", product.getName());
+            verifiedItem.put("price", product.getPrice());
+            verifiedItem.put("quantity", quantity);
+            verifiedItems.add(verifiedItem);
+        }
+
+        subtotal = subtotal.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal deliveryCharge = subtotal.compareTo(BigDecimal.valueOf(499)) >= 0
+                ? BigDecimal.ZERO
+                : BigDecimal.valueOf(49);
+        order.setSubtotal(subtotal.doubleValue());
+        order.setDeliveryCharge(deliveryCharge.doubleValue());
+        order.setTotalAmount(subtotal.add(deliveryCharge).doubleValue());
+
+        try {
+            order.setOrderedItemsSummary(objectMapper.writeValueAsString(verifiedItems));
+        } catch (JsonProcessingException exception) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Order items are invalid."));
         }
 
         return ResponseEntity.ok(orderRepository.save(order));
+    }
+
+    private Long parseLong(Object value) {
+        try {
+            return new BigDecimal(value.toString()).longValueExact();
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private Integer parsePositiveInteger(Object value) {
+        try {
+            int quantity = new BigDecimal(value.toString()).intValueExact();
+            return quantity > 0 ? quantity : null;
+        } catch (RuntimeException exception) {
+            return null;
+        }
     }
 
     @GetMapping("/user")
@@ -236,7 +310,8 @@ public class OrderController {
         }
 
         return orderRepository.findById(id).map(order -> {
-            if (!"UPI / GPay".equals(order.getPaymentMethod())) {
+            if (!"UPI".equals(order.getPaymentMethod())
+                    && !"UPI / GPay".equals(order.getPaymentMethod())) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "Only UPI orders can be marked as paid."));
             }

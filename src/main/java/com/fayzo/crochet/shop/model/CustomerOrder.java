@@ -23,9 +23,13 @@ public class CustomerOrder {
     private String customNotes;
     
     private String paymentMethod;
-    private String paymentStatus = "NOT_REQUIRED";
+    private String paymentStatus = "PENDING";
     @Column(length = 100)
     private String paymentReference;
+    @Column(length = 12)
+    private String utrNumber;
+    private Double subtotal;
+    private Double deliveryCharge;
     private Double totalAmount;
     
     @Column(length = 10000)
@@ -66,6 +70,15 @@ public class CustomerOrder {
 
     public String getPaymentReference() { return paymentReference; }
     public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
+
+    public String getUtrNumber() { return utrNumber; }
+    public void setUtrNumber(String utrNumber) { this.utrNumber = utrNumber; }
+
+    public Double getSubtotal() { return subtotal; }
+    public void setSubtotal(Double subtotal) { this.subtotal = subtotal; }
+
+    public Double getDeliveryCharge() { return deliveryCharge; }
+    public void setDeliveryCharge(Double deliveryCharge) { this.deliveryCharge = deliveryCharge; }
 
     public Double getTotalAmount() { return totalAmount; }
     public void setTotalAmount(Double totalAmount) { this.totalAmount = totalAmount; }

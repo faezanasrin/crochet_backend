@@ -1,6 +1,7 @@
 package com.fayzo.crochet.shop.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -9,10 +10,14 @@ import static org.mockito.Mockito.when;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
 
+import com.fayzo.crochet.shop.model.Customer;
 import com.fayzo.crochet.shop.model.CustomerOrder;
+import com.fayzo.crochet.shop.model.Product;
 import com.fayzo.crochet.shop.repository.CustomerRepository;
 import com.fayzo.crochet.shop.repository.OrderRepository;
+import com.fayzo.crochet.shop.repository.ProductRepository;
 import com.fayzo.crochet.shop.service.CustomerSessionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,17 +27,104 @@ import org.springframework.http.ResponseEntity;
 class OrderControllerCancellationTests {
 
     private OrderRepository orderRepository;
+    private CustomerRepository customerRepository;
+    private ProductRepository productRepository;
     private CustomerSessionService sessionService;
     private OrderController controller;
 
     @BeforeEach
     void setUp() {
         orderRepository = mock(OrderRepository.class);
+        customerRepository = mock(CustomerRepository.class);
+        productRepository = mock(ProductRepository.class);
         sessionService = new CustomerSessionService();
         controller = new OrderController(
                 orderRepository,
-                mock(CustomerRepository.class),
+                customerRepository,
+                productRepository,
                 sessionService);
+    }
+
+    @Test
+    void placesUpiOrderUsingCatalogPriceAndServerCalculatedDelivery() {
+        Customer customer = new Customer();
+        customer.setEmail("buyer@example.com");
+        customer.setName("Buyer");
+        Product product = new Product(
+                "Crochet flower", "Flowers", 100.0, "Cotton", "", true);
+        product.setId(5L);
+        when(customerRepository.findByEmailIgnoreCase("buyer@example.com"))
+                .thenReturn(Optional.of(customer));
+        when(productRepository.findById(5L)).thenReturn(Optional.of(product));
+        when(orderRepository.save(any(CustomerOrder.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        Map<String, Object> item = Map.of(
+                "productId", 5,
+                "quantity", 2,
+                "price", 1,
+                "name", "Tampered name");
+        Map<String, Object> orderData = Map.of(
+                "paymentMethod", "UPI",
+                "utrNumber", "123456789012",
+                "subtotal", 999,
+                "deliveryCharge", 0,
+                "totalAmount", 999,
+                "items", List.of(item));
+        String authorization = customerAuthorization("buyer@example.com");
+
+        ResponseEntity<?> response = controller.placeOrder(authorization, orderData);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        CustomerOrder savedOrder = assertInstanceOf(CustomerOrder.class, response.getBody());
+        assertEquals("UPI", savedOrder.getPaymentMethod());
+        assertEquals("123456789012", savedOrder.getUtrNumber());
+        assertEquals("123456789012", savedOrder.getPaymentReference());
+        assertEquals(200.0, savedOrder.getSubtotal());
+        assertEquals(49.0, savedOrder.getDeliveryCharge());
+        assertEquals(249.0, savedOrder.getTotalAmount());
+        verify(orderRepository).save(savedOrder);
+    }
+
+    @Test
+    void waivesDeliveryAtTheFreeDeliveryThreshold() {
+        Customer customer = new Customer();
+        customer.setEmail("buyer@example.com");
+        Product product = new Product(
+                "Crochet bouquet", "Bouquets", 499.0, "Cotton", "", true);
+        product.setId(7L);
+        when(customerRepository.findByEmailIgnoreCase("buyer@example.com"))
+                .thenReturn(Optional.of(customer));
+        when(productRepository.findById(7L)).thenReturn(Optional.of(product));
+        when(orderRepository.save(any(CustomerOrder.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ResponseEntity<?> response = controller.placeOrder(
+                customerAuthorization("buyer@example.com"),
+                Map.of(
+                        "paymentMethod", "UPI",
+                        "utrNumber", "123456789012",
+                        "items", List.of(
+                                Map.of("productId", 7, "quantity", 1))));
+
+        CustomerOrder savedOrder = assertInstanceOf(CustomerOrder.class, response.getBody());
+        assertEquals(499.0, savedOrder.getSubtotal());
+        assertEquals(0.0, savedOrder.getDeliveryCharge());
+        assertEquals(499.0, savedOrder.getTotalAmount());
+    }
+
+    @Test
+    void rejectsCashOnDeliveryOrders() {
+        Customer customer = new Customer();
+        customer.setEmail("buyer@example.com");
+        when(customerRepository.findByEmailIgnoreCase("buyer@example.com"))
+                .thenReturn(Optional.of(customer));
+
+        ResponseEntity<?> response = controller.placeOrder(
+                customerAuthorization("buyer@example.com"),
+                Map.of("paymentMethod", "Cash on Delivery"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        verify(orderRepository, never()).save(any(CustomerOrder.class));
     }
 
     @Test
