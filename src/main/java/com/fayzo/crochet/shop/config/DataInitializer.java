@@ -19,7 +19,7 @@ public class DataInitializer {
             createProduct(repository,
                 "Cute Pink Tulip",
                 "Flowers",
-                16.00,
+                96.00,
                 "100% Milk Cotton",
                 "/assets/tulip.jpeg"
             );
@@ -28,7 +28,7 @@ public class DataInitializer {
             createProduct(repository,
                 "Everlasting Tulip Bouquet (5 Stems)",
                 "Bouquets",
-                38.50,
+                1200,
                 "Combed Milk Cotton",
                 "/assets/bouquet.jpeg"
             );
@@ -37,7 +37,7 @@ public class DataInitializer {
             createProduct(repository,
                 "Cute Daisy Keychain",
                 "Keychains",
-                10.50,
+                110,
                 "Chenille Velvet",
                 "/assets/keychain.jpg"
             );
@@ -46,7 +46,7 @@ public class DataInitializer {
             createProduct(repository,
                 "Little Bee Bookmark",
                 "Bookmarks",
-                7.50,
+                120,
                 "Mercerized Cotton Thread",
                 "/assets/bee_bookmarker.jpeg"
             );
