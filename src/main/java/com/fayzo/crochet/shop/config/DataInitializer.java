@@ -52,7 +52,7 @@ public class DataInitializer {
             createProduct(repository,
                 "Founder's Mystery Box 🌸 (Batch of 10)",
                 "Mystery Box",
-                349.00,
+                50.00,
                 "Assorted Milk Cotton & Velvet",
                 "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&auto=format&fit=crop&q=80"
             );
