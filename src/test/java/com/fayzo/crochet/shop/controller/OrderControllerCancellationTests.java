@@ -103,6 +103,68 @@ class OrderControllerCancellationTests {
         verify(orderRepository).save(order);
     }
 
+    @Test
+    void adminCanPermanentlyDeleteAnOrder() {
+        CustomerOrder order = order("buyer@example.com", "COMPLETED");
+        when(orderRepository.findById(12L)).thenReturn(Optional.of(order));
+        String authorization =
+                "Bearer " + sessionService.createAdminSession();
+
+        ResponseEntity<?> response = controller.deleteOrder(12L, authorization);
+
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        verify(orderRepository).delete(order);
+    }
+
+    @Test
+    void customerCannotDeleteAnOrder() {
+        String authorization = customerAuthorization("buyer@example.com");
+
+        ResponseEntity<?> response = controller.deleteOrder(12L, authorization);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        verify(orderRepository, never()).findById(12L);
+    }
+
+    @Test
+    void customerCanDeleteTheirOwnCompletedOrder() {
+        CustomerOrder order = order("buyer@example.com", "COMPLETED");
+        when(orderRepository.findById(12L)).thenReturn(Optional.of(order));
+        String authorization = customerAuthorization("buyer@example.com");
+
+        ResponseEntity<?> response =
+                controller.deleteOwnFinishedOrder(12L, authorization);
+
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        verify(orderRepository).delete(order);
+    }
+
+    @Test
+    void customerCannotDeleteAnotherCustomersFinishedOrder() {
+        CustomerOrder order = order("owner@example.com", "COMPLETED");
+        when(orderRepository.findById(12L)).thenReturn(Optional.of(order));
+        String authorization = customerAuthorization("other@example.com");
+
+        ResponseEntity<?> response =
+                controller.deleteOwnFinishedOrder(12L, authorization);
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        verify(orderRepository, never()).delete(order);
+    }
+
+    @Test
+    void customerCannotDeleteAnActiveOrder() {
+        CustomerOrder order = order("buyer@example.com", "DISPATCHED");
+        when(orderRepository.findById(12L)).thenReturn(Optional.of(order));
+        String authorization = customerAuthorization("buyer@example.com");
+
+        ResponseEntity<?> response =
+                controller.deleteOwnFinishedOrder(12L, authorization);
+
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        verify(orderRepository, never()).delete(order);
+    }
+
     private CustomerOrder order(String customerEmail, String status) {
         CustomerOrder order = new CustomerOrder();
         order.setCustomerEmail(customerEmail);

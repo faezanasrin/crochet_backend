@@ -184,6 +184,49 @@ public class OrderController {
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteOrder(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (!isAdmin(authorization)) {
+            return unauthorized();
+        }
+
+        return orderRepository.findById(id)
+                .map(order -> {
+                    orderRepository.delete(order);
+                    return ResponseEntity.noContent().build();
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{id}/user")
+    public ResponseEntity<?> deleteOwnFinishedOrder(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Optional<SessionPrincipal> principal = customerSession(authorization);
+        if (principal.isEmpty()) {
+            return unauthorized();
+        }
+
+        return orderRepository.findById(id)
+                .filter(order -> order.getCustomerEmail() != null
+                        && order.getCustomerEmail().equalsIgnoreCase(principal.get().email()))
+                .map(order -> {
+                    if (!Set.of("COMPLETED", "REJECTED", "CANCELLED")
+                            .contains(order.getStatus())) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(Map.of(
+                                        "error",
+                                        "Only completed, rejected, or cancelled orders can be removed."));
+                    }
+
+                    orderRepository.delete(order);
+                    return ResponseEntity.noContent().build();
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @PatchMapping("/{id}/payment")
     public ResponseEntity<?> confirmOrderPayment(
             @PathVariable Long id,
