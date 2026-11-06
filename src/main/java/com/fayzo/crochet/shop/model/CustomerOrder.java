@@ -31,7 +31,7 @@ public class CustomerOrder {
     @Column(length = 10000)
     private String orderedItemsSummary; // Summary of items and quantities
     
-    private String status = "PENDING"; // PENDING, CONFIRMED, DISPATCHED
+    private String status = "PENDING";
     private LocalDateTime orderDate = LocalDateTime.now();
 
     public CustomerOrder() {}

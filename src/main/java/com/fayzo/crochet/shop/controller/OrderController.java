@@ -2,6 +2,7 @@ package com.fayzo.crochet.shop.controller;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +21,10 @@ import com.fayzo.crochet.shop.service.CustomerSessionService.SessionPrincipal;
 @RequestMapping("/api/orders")
 @CrossOrigin(origins = "*")
 public class OrderController {
+
+    private static final Set<String> ALLOWED_ORDER_STATUSES = Set.of(
+            "PENDING", "CONFIRMED", "CROCHETING", "DISPATCHED",
+            "COMPLETED", "REJECTED", "CANCELLED");
 
     private final OrderRepository orderRepository;
     private final CustomerRepository customerRepository;
@@ -107,6 +112,32 @@ public class OrderController {
                 orderRepository.findByCustomerEmailOrderByIdDesc(principal.get().email()));
     }
 
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<?> cancelOrder(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Optional<SessionPrincipal> principal = customerSession(authorization);
+        if (principal.isEmpty()) {
+            return unauthorized();
+        }
+
+        return orderRepository.findById(id)
+                .filter(order -> order.getCustomerEmail() != null
+                        && order.getCustomerEmail().equalsIgnoreCase(principal.get().email()))
+                .map(order -> {
+                    if (!"PENDING".equals(order.getStatus())) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(Map.of(
+                                        "error",
+                                        "Only pending orders can be cancelled."));
+                    }
+
+                    order.setStatus("CANCELLED");
+                    return ResponseEntity.ok(orderRepository.save(order));
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @GetMapping
     public ResponseEntity<?> getAllOrders(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
@@ -144,11 +175,12 @@ public class OrderController {
 
         return orderRepository.findById(id).map(order -> {
             String newStatus = body.get("status");
-            if (newStatus != null) {
-                order.setStatus(newStatus);
-                orderRepository.save(order);
+            if (newStatus == null || !ALLOWED_ORDER_STATUSES.contains(newStatus)) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Select a valid order status."));
             }
-            return ResponseEntity.ok(order);
+            order.setStatus(newStatus);
+            return ResponseEntity.ok(orderRepository.save(order));
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
