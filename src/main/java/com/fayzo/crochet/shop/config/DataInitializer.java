@@ -12,9 +12,6 @@ public class DataInitializer {
     @Bean
     CommandLineRunner initDatabase(ProductRepository repository) {
         return args -> {
-            // Clears previous database rows that have the old "localhost:5173" URLs
-            repository.deleteAll();
-
             // ==================== FLOWERS ====================
             createProduct(repository,
                 "Cute Pink Tulip",
@@ -50,10 +47,23 @@ public class DataInitializer {
                 "Mercerized Cotton Thread",
                 "/assets/bee_bookmarker.jpeg"
             );
+
+            // ==================== FOUNDER'S EXCLUSIVE ====================
+            createProduct(repository,
+                "Founder's Mystery Box 🌸 (Batch of 10)",
+                "Mystery Box",
+                349.00,
+                "Assorted Milk Cotton & Velvet",
+                "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&auto=format&fit=crop&q=80"
+            );
         };
     }
 
     private void createProduct(ProductRepository repo, String name, String category, double price, String yarn, String image) {
+        if (repo.existsByNameIgnoreCase(name)) {
+            return;
+        }
+
         Product p = new Product();
         p.setName(name);
         p.setCategory(category);
