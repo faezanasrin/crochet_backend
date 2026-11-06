@@ -50,7 +50,7 @@ public class DataInitializer {
 
             // ==================== FOUNDER'S EXCLUSIVE ====================
             createProduct(repository,
-                "Founder's Mystery Box 🌸 (Batch of 10)",
+                "Founder's Mystery Box 🌸",
                 "Mystery Box",
                 50.00,
                 "Assorted Milk Cotton & Velvet",
